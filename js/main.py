@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import kafka
 import networkx as nx
 import psycopg2
@@ -120,8 +121,12 @@ if __name__ == '__main__':
     conn.autocommit = True
     cur = conn.cursor()
 
-    consumer = kafka.KafkaConsumer(bootstrap_servers='localhost:9092')
-    consumer.subscribe(topics=('dataset_changes',))
+    consumer = kafka.KafkaConsumer(bootstrap_servers='localhost:9092',
+                                   value_deserializer=json.loads)
+    consumer.assign([kafka.TopicPartition('dataset_changes', 0)])
+
+    producer = kafka.KafkaProducer(bootstrap_servers='localhost:9092',
+                                   value_serializer=lambda v: json.dumps(v).encode('utf-8'))
 
     db.reset(cur)
     stream.restart(consumer)
