@@ -37,8 +37,8 @@ CREATE TABLE changes (
 );
 
 CREATE TABLE executions (
-    id         SERIAL  PRIMARY KEY,
-    ds_id      INTEGER REFERENCES datasets NOT NULL,
-    status     STATUS  NOT NULL,
+    id         SERIAL    PRIMARY KEY,
+    ds_id      INTEGER   REFERENCES datasets NOT NULL,
+    status     STATUS    NOT NULL,
     created_at TIMESTAMP NOT NULL
 );
