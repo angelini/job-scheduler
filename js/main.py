@@ -7,8 +7,25 @@ from js.generator import gen_dataset, gen_job, gen_relationships, gen_changes
 from js.types import Change, Dataset, Execution, Job, Relation
 
 
+def _p(prefix, template, obj):
+    print('{}\t'.format(prefix + '\t' if len(prefix) < 8 else prefix),
+          template.format(**obj.__dict__))
+
+
+def p_job(prefix, job):
+    _p(prefix, 'job({id}, {ds_id}, {path})', job)
+
+
+def p_change(prefix, change):
+    _p(prefix, 'change({id}, {ds_id}, {status}, {start} - {stop})', change)
+
+
+def p_execution(prefix, execution):
+    _p(prefix, 'execution({id}, {ds_id}, {status})', execution)
+
+
 def process_change(cur, change):
-    print('processing:\t{}'.format(change))
+    p_change('started', change)
     db.update_dataset_stop(cur, change.ds_id, change.stop)
 
     for child in db.load_children_datasets(cur, change.ds_id):
@@ -16,9 +33,11 @@ def process_change(cur, change):
             Execution(None, child.id, 'pending', datetime.now()))
 
     db.update_change_status(cur, change.id, 'successful')
+    p_change('finished', db.load_changes(cur, id=change.id)[0])
 
 
 def start_execution(cur, execution):
+    p_execution('started', execution)
     db.update_execution_status(cur, execution.id, 'running')
 
     dataset = db.load_datasets(cur, id=execution.ds_id)[0]
@@ -35,27 +54,12 @@ def start_execution(cur, execution):
 
     if dataset.stop < motm:
         job = db.load_jobs(cur, ds_id=dataset.id)[0]
-        print('kickoff:\t{}'.format(job))
+        p_job('execute', job)
         db.create_change(cur,
             Change(None, dataset.id, 'pending', dataset.stop, motm, datetime.now()))
 
     db.update_execution_status(cur, execution.id, 'successful')
-
-
-def fetch_and_process_change(cur):
-    change = db.pop_change(cur)
-
-    if not change:
-        return False
-
-    process_change(cur, change)
-
-    execution = db.pop_execution(cur)
-    while execution:
-        start_execution(cur, execution)
-        execution = db.pop_execution(cur)
-
-    return True
+    p_execution('finished', db.load_executions(cur, id=execution.id)[0])
 
 
 def generate_initial_state(cur):
@@ -74,10 +78,24 @@ def add_new_changes(cur):
     set(map(lambda c: db.create_change(cur, c), gen_changes(root_datasets)))
 
 
-def process_pending_changes(cur):
+def process_pending_executions(cur):
     while True:
-        if not fetch_and_process_change(cur):
+        oldest_pending_execution = db.pop_execution(cur)
+        if not oldest_pending_execution:
             return
+
+        start_execution(cur, oldest_pending_execution)
+
+
+def process_pending_changes(cur, start_executions=True):
+    while True:
+        oldest_pending_change = db.pop_change(cur)
+        if not oldest_pending_change:
+            return
+
+        process_change(cur, oldest_pending_change)
+        if start_executions:
+            process_pending_executions(cur)
 
 
 def build_relations_graph(datasets, relations):
