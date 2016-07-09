@@ -1,5 +1,14 @@
 from js.types import Change, Dataset, Execution, Job, Relation
 
+
+def reset(cur, drop=False):
+    command = 'DROP TABLE IF EXISTS' if drop else 'TRUNCATE TABLE'
+    for table in ['executions', 'changes', 'relations', 'jobs', 'datasets']:
+        cur.execute('{} {} CASCADE;'.format(command, table))
+        if not drop:
+            cur.execute('ALTER SEQUENCE {}_id_seq RESTART WITH 1;'.format(table))
+
+
 def _load(cur, clazz, wheres):
     table = clazz.__name__.lower() + 's'
     columns = clazz._fields

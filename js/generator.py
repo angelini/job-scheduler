@@ -7,6 +7,7 @@ from js.types import Change, Dataset, Execution, Job, Relation, STORES
 
 START = datetime(year=2016, month=1, day=1)
 
+
 def rand_select(l):
     return l[random.randint(0, len(l) - 1)]
 

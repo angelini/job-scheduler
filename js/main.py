@@ -1,8 +1,9 @@
 from datetime import datetime
+import kafka
 import networkx as nx
 import psycopg2
 
-from js import db
+from js import db, stream
 from js.generator import gen_dataset, gen_job, gen_relationships, gen_changes
 from js.types import Change, Dataset, Execution, Job, Relation
 
@@ -33,7 +34,6 @@ def process_change(cur, change):
             Execution(None, child.id, 'pending', datetime.now()))
 
     db.update_change_status(cur, change.id, 'successful')
-    p_change('finished', db.load_changes(cur, id=change.id)[0])
 
 
 def start_execution(cur, execution):
@@ -115,28 +115,22 @@ def print_graph(graph):
     print(nx.nx_agraph.to_agraph(graph), end='')
 
 
-def reset_db(cur, drop=False):
-    command = 'DROP TABLE IF EXISTS' if drop else 'TRUNCATE TABLE'
-    for table in ['executions', 'changes', 'relations', 'jobs', 'datasets']:
-        cur.execute('{} {} CASCADE;'.format(command, table))
-        if not drop:
-            cur.execute('ALTER SEQUENCE {}_id_seq RESTART WITH 1;'.format(table))
+if __name__ == '__main__':
+    conn = psycopg2.connect("dbname=schedule user=ubuntu")
+    conn.autocommit = True
+    cur = conn.cursor()
 
+    consumer = kafka.KafkaConsumer(bootstrap_servers='localhost:9092')
+    consumer.subscribe(topics=('dataset_changes',))
 
-# ------------------------------------------------------------------------------
+    db.reset(cur)
+    stream.restart(consumer)
 
+    generate_initial_state(cur)
 
-conn = psycopg2.connect("dbname=schedule user=ubuntu")
-conn.autocommit = True
+    graph = build_relations_graph(db.load_datasets(cur), db.load_relations(cur))
+    print_graph(graph)
+    assert nx.algorithms.dag.is_directed_acyclic_graph(graph)
 
-cur = conn.cursor()
-
-reset_db(cur)
-generate_initial_state(cur)
-
-graph = build_relations_graph(db.load_datasets(cur), db.load_relations(cur))
-print_graph(graph)
-assert nx.algorithms.dag.is_directed_acyclic_graph(graph)
-
-add_new_changes(cur)
-process_pending_changes(cur)
+    add_new_changes(cur)
+    process_pending_changes(cur)
