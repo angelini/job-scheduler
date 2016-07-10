@@ -1,11 +1,7 @@
-from datetime import datetime
-import json
-import kafka
 import networkx as nx
-import psycopg2
 
 from js import db, stream
-from js.generator import gen_dataset, gen_job, gen_relationships, gen_changes
+from js.generator import gen_dataset, gen_job, gen_relationships, gen_changes, now_seconds
 from js.types import Change, Execution
 
 
@@ -32,7 +28,7 @@ def process_change(cur, change):
 
     for child in db.load_children_datasets(cur, change.ds_id):
         db.create_execution(cur,
-                            Execution(None, child.id, 'pending', datetime.now()))
+                            Execution(None, child.id, 'pending', now_seconds()))
 
     db.update_change_status(cur, change.id, 'successful')
 
@@ -57,7 +53,7 @@ def start_execution(cur, execution):
         job = db.load_jobs(cur, ds_id=dataset.id)[0]
         p_job('execute', job)
         db.create_change(cur,
-                         Change(None, dataset.id, 'pending', dataset.stop, motm, datetime.now()))
+                         Change(None, dataset.id, 'pending', dataset.stop, motm, now_seconds()))
 
     db.update_execution_status(cur, execution.id, 'successful')
     p_execution('finished', db.load_executions(cur, id=execution.id)[0])
@@ -74,9 +70,9 @@ def generate_initial_state(cur):
     set(map(lambda r: db.create_relation(cur, r), gen_relationships(datasets)))
 
 
-def add_new_changes(cur):
-    root_datasets = db.load_root_datasets(cur)
-    set(map(lambda c: db.create_change(cur, c), gen_changes(root_datasets)))
+def pull_new_changes(cur, consumer):
+    changes = stream.poll_for_changes(consumer)
+    set(map(lambda c: db.create_change(cur, c), changes))
 
 
 def process_pending_executions(cur):
@@ -117,25 +113,20 @@ def print_graph(graph):
 
 
 if __name__ == '__main__':
-    conn = psycopg2.connect("dbname=schedule user=alexangelini")
-    conn.autocommit = True
-    cur = conn.cursor()
-
-    consumer = kafka.KafkaConsumer(bootstrap_servers='localhost:9092',
-                                   value_deserializer=json.loads)
-    consumer.assign([kafka.TopicPartition('dataset_changes', 0)])
-
-    producer = kafka.KafkaProducer(bootstrap_servers='localhost:9092',
-                                   value_serializer=lambda v: json.dumps(v).encode('utf-8'))
+    cur = db.create_cursor()
+    consumer = stream.create_consumer()
+    producer = stream.create_producer()
 
     db.reset(cur)
-    stream.restart(consumer)
-
     generate_initial_state(cur)
 
     graph = build_relations_graph(db.load_datasets(cur), db.load_relations(cur))
     print_graph(graph)
     assert nx.algorithms.dag.is_directed_acyclic_graph(graph)
 
-    add_new_changes(cur)
+    root_datasets = db.load_root_datasets(cur)
+    changes = gen_changes(root_datasets)
+    stream.push_changes(producer, changes)
+
+    pull_new_changes(cur, consumer)
     process_pending_changes(cur)

@@ -1,4 +1,12 @@
+import psycopg2
+
 from js.types import Change, Dataset, Execution, Job, Relation
+
+
+def create_cursor():
+    conn = psycopg2.connect('dbname=schedule user=alexangelini')
+    conn.autocommit = True
+    return conn.cursor()
 
 
 def reset(cur, drop=False):

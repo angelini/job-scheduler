@@ -8,6 +8,10 @@ from js.types import Change, Dataset, Job, Relation, STORES
 START = datetime(year=2016, month=1, day=1)
 
 
+def now_seconds():
+    return datetime.now().replace(microsecond=0)
+
+
 def rand_select(l):
     return l[random.randint(0, len(l) - 1)]
 
@@ -53,6 +57,6 @@ def gen_changes(datasets):
         if random.randint(1, 10) <= 8:
             new_stop = dataset.stop + timedelta(days=random.randint(0, 10))
             changes.append(
-                Change(None, dataset.id, 'pending', dataset.stop, new_stop, datetime.now()))
+                Change(None, dataset.id, 'pending', dataset.stop, new_stop, now_seconds()))
 
     return changes
