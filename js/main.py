@@ -19,22 +19,27 @@ def p_change(prefix, change):
 
 
 def p_execution(prefix, execution):
-    _p(prefix, 'execution({id}, {ds_id}, {status})', execution)
+    _p(prefix, 'execution({id}, {ds_id}, {status}, {skip_reason})', execution)
 
 
 def process_change(cur, change):
-    p_change('started', change)
+    p_change('run', change)
     db.update_dataset_stop(cur, change.ds_id, change.stop)
 
     for child in db.load_children_datasets(cur, change.ds_id):
         db.create_execution(cur,
-                            Execution(None, child.id, 'pending', now_seconds()))
+                            Execution(None, child.id, 'pending', now_seconds(), None))
 
     db.update_change_status(cur, change.id, 'successful')
 
 
+def should_skip(dataset, motm):
+    if dataset.stop > motm:
+        return 'MOTM earlier than current stop'
+
+
 def start_execution(cur, execution):
-    p_execution('started', execution)
+    p_execution('  run', execution)
     db.update_execution_status(cur, execution.id, 'running')
 
     dataset = db.load_datasets(cur, id=execution.ds_id)[0]
@@ -49,14 +54,18 @@ def start_execution(cur, execution):
         elif input.stop < motm:
             motm = input.stop
 
-    if dataset.stop < motm:
+    skip_reason = should_skip(dataset, motm)
+    if skip_reason:
+        db.update_execution_status(cur, execution.id, 'skipped', skip_reason=skip_reason)
+        p_execution('  skip', db.load_executions(cur, id=execution.id)[0])
+    else:
         job = db.load_jobs(cur, ds_id=dataset.id)[0]
-        p_job('execute', job)
+        p_job('    launch', job)
         db.create_change(cur,
                          Change(None, dataset.id, 'pending', dataset.stop, motm, now_seconds()))
 
-    db.update_execution_status(cur, execution.id, 'successful')
-    p_execution('finished', db.load_executions(cur, id=execution.id)[0])
+        db.update_execution_status(cur, execution.id, 'successful')
+        p_execution('  success', db.load_executions(cur, id=execution.id)[0])
 
 
 def generate_initial_state(cur):

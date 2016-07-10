@@ -11,10 +11,14 @@ def create_cursor():
 
 def reset(cur, drop=False):
     command = 'DROP TABLE IF EXISTS' if drop else 'TRUNCATE TABLE'
-    for table in ['executions', 'changes', 'relations', 'jobs', 'datasets']:
+    for table in ('executions', 'changes', 'relations', 'jobs', 'datasets'):
         cur.execute('{} {} CASCADE;'.format(command, table))
         if not drop:
             cur.execute('ALTER SEQUENCE {}_id_seq RESTART WITH 1;'.format(table))
+
+    if drop:
+        for t in ('STORE', 'STATUS'):
+            cur.execute('DROP TYPE IF EXISTS {}'.format(t))
 
 
 def _load(cur, clazz, wheres):
@@ -137,12 +141,12 @@ def update_dataset_stop(cur, ds_id, stop):
     ''', (stop, ds_id))
 
 
-def update_execution_status(cur, id, status):
+def update_execution_status(cur, id, status, skip_reason=None):
     cur.execute('''
         UPDATE executions
-        SET status = %s
+        SET status = %s, skip_reason = %s
         WHERE id = %s
-    ''', (status, id))
+    ''', (status, skip_reason, id))
 
 
 def update_change_status(cur, id, status):

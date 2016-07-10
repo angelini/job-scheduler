@@ -1,5 +1,5 @@
 CREATE TYPE STORE AS ENUM ('hdfs', 'file');
-CREATE TYPE STATUS AS ENUM ('pending', 'running', 'failed', 'successful');
+CREATE TYPE STATUS AS ENUM ('pending', 'running', 'failed', 'skipped', 'successful');
 
 CREATE TABLE datasets (
     id    SERIAL    PRIMARY KEY,
@@ -37,8 +37,12 @@ CREATE TABLE changes (
 );
 
 CREATE TABLE executions (
-    id         SERIAL    PRIMARY KEY,
-    ds_id      INTEGER   REFERENCES datasets NOT NULL,
-    status     STATUS    NOT NULL,
-    created_at TIMESTAMP NOT NULL
+    id          SERIAL    PRIMARY KEY,
+    ds_id       INTEGER   REFERENCES datasets NOT NULL,
+    status      STATUS    NOT NULL,
+    created_at  TIMESTAMP NOT NULL,
+    skip_reason TEXT
+                CONSTRAINT reason_not_null_when_skipped
+                CHECK((status = 'skipped' AND skip_reason IS NOT NULL) OR
+                      (status <> 'skipped' AND skip_reason IS NULL))
 );
