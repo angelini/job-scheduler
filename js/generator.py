@@ -3,7 +3,7 @@ import os
 import random
 import string
 
-from js.types import Change, Dataset, Execution, Job, Relation, STORES
+from js.types import Change, Dataset, Job, Relation, STORES
 
 START = datetime(year=2016, month=1, day=1)
 
@@ -32,6 +32,7 @@ def gen_dataset():
 def gen_job(ds_id):
     return Job(None, ds_id, gen_path('jobs') + '.sh')
 
+
 def gen_relationships(datasets):
     relations = []
 
@@ -43,6 +44,7 @@ def gen_relationships(datasets):
             relations.append((datasets[i - 2].id, dataset.id))
 
     return list(map(lambda t: Relation(None, t[0], t[1]), relations))
+
 
 def gen_changes(datasets):
     changes = []

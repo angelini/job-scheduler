@@ -6,12 +6,12 @@ import psycopg2
 
 from js import db, stream
 from js.generator import gen_dataset, gen_job, gen_relationships, gen_changes
-from js.types import Change, Dataset, Execution, Job, Relation
+from js.types import Change, Execution
 
 
 def _p(prefix, template, obj):
     print('{}\t'.format(prefix + '\t' if len(prefix) < 8 else prefix),
-          template.format(**obj.__dict__))
+          template.format(**obj._asdict()))
 
 
 def p_job(prefix, job):
@@ -32,7 +32,7 @@ def process_change(cur, change):
 
     for child in db.load_children_datasets(cur, change.ds_id):
         db.create_execution(cur,
-            Execution(None, child.id, 'pending', datetime.now()))
+                            Execution(None, child.id, 'pending', datetime.now()))
 
     db.update_change_status(cur, change.id, 'successful')
 
@@ -57,7 +57,7 @@ def start_execution(cur, execution):
         job = db.load_jobs(cur, ds_id=dataset.id)[0]
         p_job('execute', job)
         db.create_change(cur,
-            Change(None, dataset.id, 'pending', dataset.stop, motm, datetime.now()))
+                         Change(None, dataset.id, 'pending', dataset.stop, motm, datetime.now()))
 
     db.update_execution_status(cur, execution.id, 'successful')
     p_execution('finished', db.load_executions(cur, id=execution.id)[0])
@@ -117,7 +117,7 @@ def print_graph(graph):
 
 
 if __name__ == '__main__':
-    conn = psycopg2.connect("dbname=schedule user=ubuntu")
+    conn = psycopg2.connect("dbname=schedule user=alexangelini")
     conn.autocommit = True
     cur = conn.cursor()
 
