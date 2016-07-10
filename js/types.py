@@ -22,3 +22,7 @@ Change = namedtuple(
 Execution = namedtuple(
     'Execution',
     ['id', 'ds_id', 'status', 'created_at', 'skip_reason'])
+
+Timer = namedtuple(
+    'Timer',
+    ['id', 'ds_id', 'status', 'start', 'created_at'])

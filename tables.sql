@@ -46,3 +46,11 @@ CREATE TABLE executions (
                 CHECK((status = 'skipped' AND skip_reason IS NOT NULL) OR
                       (status <> 'skipped' AND skip_reason IS NULL))
 );
+
+CREATE TABLE timers (
+    id         SERIAL  PRIMARY KEY,
+    ds_id      INTEGER REFERENCES datasets NOT NULL,
+    status     STATUS  NOT NULL,
+    start      TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);

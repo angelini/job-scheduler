@@ -1,6 +1,6 @@
 import psycopg2
 
-from js.types import Change, Dataset, Execution, Job, Relation
+from js.types import Change, Dataset, Execution, Job, Relation, Timer
 
 
 def create_cursor():
@@ -18,7 +18,7 @@ def reset(cur, drop=False):
 
     if drop:
         for t in ('STORE', 'STATUS'):
-            cur.execute('DROP TYPE IF EXISTS {}'.format(t))
+            cur.execute('DROP TYPE IF EXISTS {} CASCADE'.format(t))
 
 
 def _load(cur, clazz, wheres):
@@ -93,6 +93,14 @@ def load_executions(cur, **kwargs):
 
 def create_execution(cur, new_execution):
     _create(cur, Execution, new_execution)
+
+
+def load_timers(cur, **kwargs):
+    return _load(cur, Timer, kwargs)
+
+
+def create_timer(cur, new_timer):
+    _create(cur, Timer, new_timer)
 
 
 def load_root_datasets(cur):
