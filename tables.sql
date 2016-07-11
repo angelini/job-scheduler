@@ -48,9 +48,9 @@ CREATE TABLE executions (
 );
 
 CREATE TABLE timers (
-    id         SERIAL  PRIMARY KEY,
-    ds_id      INTEGER REFERENCES datasets NOT NULL,
-    status     STATUS  NOT NULL,
+    id         SERIAL    PRIMARY KEY,
+    ds_id      INTEGER   REFERENCES datasets NOT NULL,
+    status     STATUS    NOT NULL,
     start      TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL
 );

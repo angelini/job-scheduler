@@ -11,7 +11,7 @@ def create_cursor():
 
 def reset(cur, drop=False):
     command = 'DROP TABLE IF EXISTS' if drop else 'TRUNCATE TABLE'
-    for table in ('executions', 'changes', 'relations', 'jobs', 'datasets'):
+    for table in ('timers', 'executions', 'changes', 'relations', 'jobs', 'datasets'):
         cur.execute('{} {} CASCADE;'.format(command, table))
         if not drop:
             cur.execute('ALTER SEQUENCE {}_id_seq RESTART WITH 1;'.format(table))
@@ -193,3 +193,17 @@ def pop_change(cur):
 
 def pop_execution(cur):
     return _pop(cur, Execution)
+
+
+def previous_successful_execution(cur, current_exec):
+    cur.execute('''
+        SELECT {}
+        FROM executions
+        WHERE ds_id = %s
+        AND created_at < %s
+        AND status = 'successful'
+    '''.format(', '.join(Execution._fields)),
+        (current_exec.ds_id, current_exec.created_at))
+
+    previous = cur.fetchone()
+    return Execution(*previous) if previous else None

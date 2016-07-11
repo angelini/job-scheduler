@@ -1,8 +1,11 @@
+from datetime import timedelta
 import networkx as nx
 
 from js import db, stream
 from js.generator import gen_dataset, gen_job, gen_relationships, gen_changes, now_seconds
-from js.types import Change, Execution
+from js.types import Change, Execution, Timer
+
+MINIMUM_WAIT = timedelta(hours=1)
 
 
 def _p(prefix, template, obj):
@@ -27,15 +30,24 @@ def process_change(cur, change):
     db.update_dataset_stop(cur, change.ds_id, change.stop)
 
     for child in db.load_children_datasets(cur, change.ds_id):
-        db.create_execution(cur,
-                            Execution(None, child.id, 'pending', now_seconds(), None))
+        db.create_execution(
+            cur,
+            Execution(None, child.id, 'pending', now_seconds(), None))
 
     db.update_change_status(cur, change.id, 'successful')
 
 
-def should_skip(dataset, motm):
+def should_skip(dataset, motm, previous_execution):
     if dataset.stop > motm:
         return 'MOTM earlier than current stop'
+
+    if previous_execution and previous_execution.created_at + MINIMUM_WAIT > now_seconds():
+        db.create_timer(
+            cur,
+            Timer(None, dataset.id, 'pending', previous_execution.created_at + MINIMUM_WAIT, now_seconds()))
+        return 'Previous execution within the minimum wait time'
+
+    return False
 
 
 def start_execution(cur, execution):
@@ -44,6 +56,7 @@ def start_execution(cur, execution):
 
     dataset = db.load_datasets(cur, id=execution.ds_id)[0]
     inputs = db.load_parent_datasets(cur, dataset.id)
+    previous_execution = db.previous_successful_execution(cur, execution)
 
     assert inputs
 
@@ -54,15 +67,17 @@ def start_execution(cur, execution):
         elif input.stop < motm:
             motm = input.stop
 
-    skip_reason = should_skip(dataset, motm)
+    skip_reason = should_skip(dataset, motm, previous_execution)
+
     if skip_reason:
         db.update_execution_status(cur, execution.id, 'skipped', skip_reason=skip_reason)
         p_execution('  skip', db.load_executions(cur, id=execution.id)[0])
     else:
         job = db.load_jobs(cur, ds_id=dataset.id)[0]
         p_job('    launch', job)
-        db.create_change(cur,
-                         Change(None, dataset.id, 'pending', dataset.stop, motm, now_seconds()))
+        db.create_change(
+            cur,
+            Change(None, dataset.id, 'pending', dataset.stop, motm, now_seconds()))
 
         db.update_execution_status(cur, execution.id, 'successful')
         p_execution('  success', db.load_executions(cur, id=execution.id)[0])
