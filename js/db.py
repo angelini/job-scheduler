@@ -21,24 +21,37 @@ def reset(cur, drop=False):
             cur.execute('DROP TYPE IF EXISTS {} CASCADE'.format(t))
 
 
+def _wheres_to_predicate_and_values(wheres):
+    items = wheres.items()
+    values = tuple(i[1][1] if isinstance(i[1], tuple) else i[1] for i in items)
+
+    def format_item(item):
+        name, value = item
+        if isinstance(value, tuple):
+            return '{} {} %s'.format(name, value[0])
+        else:
+            return '{} = %s'.format(name)
+
+    predicate = ' AND '.join(map(format_item, items))
+
+    if predicate:
+        predicate = 'WHERE ' + predicate
+
+    return (predicate, values)
+
+
 def _load(cur, clazz, wheres):
     table = clazz.__name__.lower() + 's'
     columns = clazz._fields
     column_names = ', '.join(columns)
 
-    where_items = wheres.items()
-    where_values = tuple(i[1] for i in where_items)
-
-    where_predicates = ' AND '.join(
-        map(lambda t: '{} = %s'.format(t[0]), where_items))
-
-    if where_predicates:
-        where_predicates = "WHERE " + where_predicates
+    where_predicate, where_values = _wheres_to_predicate_and_values(wheres)
 
     cur.execute('''
         SELECT {}
-        FROM {} {};
-    '''.format(column_names, table, where_predicates), where_values)
+        FROM {}
+        {};
+    '''.format(column_names, table, where_predicate), where_values)
     return [clazz(*row) for row in cur.fetchall()]
 
 
@@ -165,10 +178,21 @@ def update_change_status(cur, id, status):
     ''', (status, id))
 
 
-def _pop(cur, clazz):
+def update_timer_status(cur, id, status):
+    cur.execute('''
+        UPDATE timers
+        SET status = %s
+        WHERE id = %s
+    ''', (status, id))
+
+
+def _pop(cur, clazz, wheres):
     table = clazz.__name__.lower() + 's'
     columns = clazz._fields
     column_names = ', '.join(columns)
+
+    wheres['status'] = 'pending'
+    where_predicate, where_values = _wheres_to_predicate_and_values(wheres)
 
     cur.execute('''
         UPDATE {}
@@ -176,23 +200,28 @@ def _pop(cur, clazz):
         WHERE id IN (
             SELECT id
             FROM {}
-            WHERE status = 'pending'
+            {}
             ORDER BY created_at
             LIMIT 1
         )
         RETURNING {}
-    '''.format(table, table, column_names))
+    '''.format(table, table, where_predicate, column_names),
+        where_values)
 
     results = cur.fetchone()
     return clazz(*results) if results else None
 
 
 def pop_change(cur):
-    return _pop(cur, Change)
+    return _pop(cur, Change, {})
 
 
 def pop_execution(cur):
-    return _pop(cur, Execution)
+    return _pop(cur, Execution, {})
+
+
+def pop_valid_timer(cur, now):
+    return _pop(cur, Timer, {'start': ('<=', now)})
 
 
 def previous_successful_execution(cur, current_exec):

@@ -5,7 +5,7 @@ from js import db, stream
 from js.generator import gen_dataset, gen_job, gen_relationships, gen_changes, now_seconds
 from js.types import Change, Execution, Timer
 
-MINIMUM_WAIT = timedelta(hours=1)
+MINIMUM_WAIT = timedelta(seconds=30)
 
 
 def _p(prefix, template, obj):
@@ -25,6 +25,10 @@ def p_execution(prefix, execution):
     _p(prefix, 'execution({id}, {ds_id}, {status}, {skip_reason})', execution)
 
 
+def p_timer(prefix, timer):
+    _p(prefix, 'timer({id}, {ds_id}, {status}, {start})', timer)
+
+
 def process_change(cur, change):
     p_change('run', change)
     db.update_dataset_stop(cur, change.ds_id, change.stop)
@@ -35,6 +39,15 @@ def process_change(cur, change):
             Execution(None, child.id, 'pending', now_seconds(), None))
 
     db.update_change_status(cur, change.id, 'successful')
+
+
+def process_timer(cur, timer):
+    p_timer('run', timer)
+    db.create_execution(
+        cur,
+        Execution(None, timer.ds_id, 'pending', now_seconds(), None))
+
+    db.update_timer_status(cur, timer.id, 'successful')
 
 
 def should_skip(dataset, motm, previous_execution):
@@ -115,6 +128,17 @@ def process_pending_changes(cur, start_executions=True):
             return
 
         process_change(cur, oldest_pending_change)
+        if start_executions:
+            process_pending_executions(cur)
+
+
+def process_pending_timers(cur, start_executions=True):
+    while True:
+        oldest_valid_timer = db.pop_valid_timer(cur, now_seconds())
+        if not oldest_valid_timer:
+            return
+
+        process_timer(cur, oldest_valid_timer)
         if start_executions:
             process_pending_executions(cur)
 
